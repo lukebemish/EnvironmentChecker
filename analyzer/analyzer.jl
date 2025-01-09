@@ -59,6 +59,49 @@ function main()
     production = process(args["production"])
     development = process(args["development"])
 
+    devclasstolambdadescs = Dict{String, Set{String}}()
+    prodclasstolambdadescs = Dict{String, Set{String}}()
+
+    for method ∈ development.methods
+        if ismethodlambda(method)
+            class = split(method, ".")[1]
+            parenindex = findfirst(isequal('('), method)
+            descriptor = method[parenindex:end]
+            set = get!(devclasstolambdadescs, class, Set{String}())
+            push!(set, descriptor)
+        end
+    end
+
+    for method ∈ production.methods
+        if ismethodlambda(method)
+            class = split(method, ".")[1]
+            parenindex = findfirst(isequal('('), method)
+            descriptor = method[parenindex:end]
+            set = get!(prodclasstolambdadescs, class, Set{String}())
+            push!(set, descriptor)
+        end
+    end
+
+    lambdadescsmissinginprod = 0
+
+    for (class, descriptors) ∈ devclasstolambdadescs
+        if haskey(prodclasstolambdadescs, class)
+            prodset = prodclasstolambdadescs[class]
+            leftover = setdiff(descriptors, prodset)
+            lambdadescsmissinginprod += length(leftover)
+        end
+    end
+
+    lambdadescsmissingindev = 0
+
+    for (class, descriptors) ∈ prodclasstolambdadescs
+        if haskey(devclasstolambdadescs, class)
+            devset = devclasstolambdadescs[class]
+            leftover = setdiff(descriptors, devset)
+            lambdadescsmissingindev += length(leftover)
+        end
+    end
+
     println("Development classes: ", length(development.classes))
     missingdevclasses = setdiff(development.classes, production.classes)
     println(" - Missing from production: ", length(missingdevclasses))
@@ -79,6 +122,7 @@ function main()
             delete!(missingdevmethods, accessname)
         end
         println("   - Lambdas: ", length(lambdanames))
+        println("     - Missing descriptors: ", lambdadescsmissinginprod)
         println("   - Nest access: ", length(accessnames))
         println("   - Other: ", length(missingdevmethods))
         for missingdevmethod ∈ missingdevmethods
@@ -123,6 +167,7 @@ function main()
             delete!(missingprodmethods, accessname)
         end
         println("   - Lambdas: ", length(lambdanames))
+        println("     - Missing descriptors: ", lambdadescsmissingindev)
         println("   - Nest access: ", length(accessnames))
         println("   - Other: ", length(missingprodmethods))
         for missingprodmethod ∈ missingprodmethods
